@@ -129,6 +129,11 @@ You can also open the HTML file directly in a browser, but some features (like e
 - Check for JavaScript errors
 - Ensure you're running via a local server, not file://
 
+
+## Other
+This is an alternative Blender add-on simplifies the process of exporting your 3D scenes into interactive web experiences using A-Frame, a popular web framework for building virtual reality (VR) and augmented reality (AR) experiences. It creates a  GLB (binary glTF) file for the scene and an HTML file that displays the objects in a scene. It is more orginal to the Blender file but I just wanted something that could be editable in html for my students.
+- [Blender to A-Frame Exporter ](https://daydevthailand.gumroad.com/l/aframeexporter)
+
 ## License
 
 MIT License
