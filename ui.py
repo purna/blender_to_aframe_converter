@@ -35,18 +35,44 @@ class AFRAME_PT_export_panel(Panel):
         box = layout.box()
         box.label(text="A-Frame Settings", icon='WORLD')
         box.prop(scene, "aframe_version")
+        box.prop(scene, "aframe_use_camera_look_controls")
+        box.prop(scene, "aframe_export_lights")
         box.prop(scene, "aframe_include_environment")
         if scene.aframe_include_environment:
             box.prop(scene, "aframe_environment_preset")
         box.prop(scene, "aframe_sky_color")
 
-        # Fog settings
+        # Advanced settings
         box = layout.box()
-        box.label(text="Fog", icon='MOD_SMOKE')
+        box.label(text="Advanced", icon='SETTINGS')
+        box.prop(scene, "aframe_shadows_enabled")
+        box.prop(scene, "aframe_enable_cursor")
         box.prop(scene, "aframe_fog_enabled")
         if scene.aframe_fog_enabled:
             box.prop(scene, "aframe_fog_color")
             box.prop(scene, "aframe_fog_density")
+
+        # Web App settings
+        box = layout.box()
+        box.label(text="Web App", icon='URL')
+        box.prop(scene, "aframe_theme_color")
+        box.prop(scene, "aframe_background_color")
+        box.prop(scene, "aframe_include_manifest")
+        box.prop(scene, "aframe_include_service_worker")
+
+        # Materials settings
+        box = layout.box()
+        box.label(text="Materials", icon='MATERIAL')
+        box.prop(scene, "aframe_use_mixins")
+        box.prop(scene, "aframe_include_custom_css")
+        if scene.aframe_include_custom_css:
+            box.prop(scene, "aframe_custom_css")
+        box.prop(scene, "aframe_export_textures")
+
+        # Export Format settings
+        box = layout.box()
+        box.label(text="Export Format", icon='FILE_ARCHIVE')
+        box.prop(scene, "aframe_export_as_zip")
         
         # Export button
         layout.separator()
@@ -133,6 +159,85 @@ def register():
         default='#87CEEB',
     )
 
+    bpy.types.Scene.aframe_use_camera_look_controls = bpy.props.BoolProperty(
+        name="Use Camera as Look Controls",
+        description="Use camera as look controls",
+        default=True,
+    )
+
+    bpy.types.Scene.aframe_export_lights = bpy.props.BoolProperty(
+        name="Export Lights",
+        description="Export lights to A-Frame",
+        default=False,
+    )
+
+    bpy.types.Scene.aframe_shadows_enabled = bpy.props.BoolProperty(
+        name="Enable Shadows",
+        description="Enable shadows in A-Frame",
+        default=True,
+    )
+
+    bpy.types.Scene.aframe_enable_cursor = bpy.props.BoolProperty(
+        name="Enable Cursor",
+        description="Enable cursor in A-Frame",
+        default=False,
+    )
+
+    bpy.types.Scene.aframe_theme_color = bpy.props.StringProperty(
+        name="Theme Color",
+        description="Theme color for web app",
+        default="#ff6b6b",
+    )
+
+    bpy.types.Scene.aframe_background_color = bpy.props.StringProperty(
+        name="Background Color",
+        description="Background color for web app",
+        default="#212121",
+    )
+
+    bpy.types.Scene.aframe_include_manifest = bpy.props.BoolProperty(
+        name="Include Web App Manifest",
+        description="Include web app manifest",
+        default=True,
+    )
+
+    bpy.types.Scene.aframe_include_service_worker = bpy.props.BoolProperty(
+        name="Include Service Worker",
+        description="Include service worker for offline support",
+        default=True,
+    )
+
+    bpy.types.Scene.aframe_use_mixins = bpy.props.BoolProperty(
+        name="Use Material Mixins",
+        description="Use material mixins for better performance",
+        default=True,
+    )
+
+    bpy.types.Scene.aframe_include_custom_css = bpy.props.BoolProperty(
+        name="Include Custom CSS",
+        description="Include custom CSS",
+        default=False,
+    )
+
+    bpy.types.Scene.aframe_custom_css = bpy.props.StringProperty(
+        name="Custom CSS",
+        description="Path to custom CSS file",
+        default="",
+        subtype='FILE_PATH',
+    )
+
+    bpy.types.Scene.aframe_export_textures = bpy.props.BoolProperty(
+        name="Export Textures",
+        description="Export textures with the scene",
+        default=False,
+    )
+
+    bpy.types.Scene.aframe_export_as_zip = bpy.props.BoolProperty(
+        name="Export as ZIP",
+        description="Export as ZIP file instead of folder",
+        default=False,
+    )
+
     bpy.types.Scene.aframe_fog_enabled = bpy.props.BoolProperty(
         name="Enable Fog",
         description="Enable scene fog",
@@ -172,6 +277,32 @@ def unregister():
         del bpy.types.Scene.aframe_environment_preset
     if hasattr(bpy.types.Scene, 'aframe_sky_color'):
         del bpy.types.Scene.aframe_sky_color
+    if hasattr(bpy.types.Scene, 'aframe_use_camera_look_controls'):
+        del bpy.types.Scene.aframe_use_camera_look_controls
+    if hasattr(bpy.types.Scene, 'aframe_export_lights'):
+        del bpy.types.Scene.aframe_export_lights
+    if hasattr(bpy.types.Scene, 'aframe_shadows_enabled'):
+        del bpy.types.Scene.aframe_shadows_enabled
+    if hasattr(bpy.types.Scene, 'aframe_enable_cursor'):
+        del bpy.types.Scene.aframe_enable_cursor
+    if hasattr(bpy.types.Scene, 'aframe_theme_color'):
+        del bpy.types.Scene.aframe_theme_color
+    if hasattr(bpy.types.Scene, 'aframe_background_color'):
+        del bpy.types.Scene.aframe_background_color
+    if hasattr(bpy.types.Scene, 'aframe_include_manifest'):
+        del bpy.types.Scene.aframe_include_manifest
+    if hasattr(bpy.types.Scene, 'aframe_include_service_worker'):
+        del bpy.types.Scene.aframe_include_service_worker
+    if hasattr(bpy.types.Scene, 'aframe_use_mixins'):
+        del bpy.types.Scene.aframe_use_mixins
+    if hasattr(bpy.types.Scene, 'aframe_include_custom_css'):
+        del bpy.types.Scene.aframe_include_custom_css
+    if hasattr(bpy.types.Scene, 'aframe_custom_css'):
+        del bpy.types.Scene.aframe_custom_css
+    if hasattr(bpy.types.Scene, 'aframe_export_textures'):
+        del bpy.types.Scene.aframe_export_textures
+    if hasattr(bpy.types.Scene, 'aframe_export_as_zip'):
+        del bpy.types.Scene.aframe_export_as_zip
     if hasattr(bpy.types.Scene, 'aframe_fog_enabled'):
         del bpy.types.Scene.aframe_fog_enabled
     if hasattr(bpy.types.Scene, 'aframe_fog_color'):

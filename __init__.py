@@ -43,7 +43,6 @@ def register():
     wm = bpy.types.WindowManager
     wm.aframe_show_aframe     = BoolProperty(name="A-Frame Settings", default=True)
     wm.aframe_show_environment= BoolProperty(name="Environment", default=True)
-    wm.aframe_show_fog        = BoolProperty(name="Fog", default=False)
     wm.aframe_show_webapp     = BoolProperty(name="Web App", default=False)
     wm.aframe_show_materials  = BoolProperty(name="Materials", default=False)
     wm.aframe_show_export     = BoolProperty(name="Export Format", default=False)
@@ -74,8 +73,7 @@ def unregister():
 
     # Remove WindowManager UI state props
     wm = bpy.types.WindowManager
-    for prop in ('aframe_show_aframe', 'aframe_show_environment', 'aframe_show_fog',
-                 'aframe_show_webapp', 'aframe_show_materials', 'aframe_show_export',
+    for prop in ('aframe_show_aframe', 'aframe_show_environment', 'aframe_show_webapp', 'aframe_show_materials', 'aframe_show_export',
                  'aframe_show_adv'):
         if hasattr(wm, prop):
             delattr(wm, prop)
@@ -196,12 +194,25 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         prop_map = {
             'aframe_project_name':        'project_name',
             'aframe_version':             'aframe_version',
+            'aframe_use_camera_look_controls': 'camera_as_look_controls',
+            'aframe_export_lights':       'export_lights',
             'aframe_include_environment': 'include_environment',
             'aframe_environment_preset':  'environment_preset',
             'aframe_sky_color':           'sky_color',
+            'aframe_shadows_enabled':     'shadows_enabled',
+            'aframe_enable_cursor':       'enable_cursor',
             'aframe_fog_enabled':         'fog_enabled',
             'aframe_fog_color':           'fog_color',
             'aframe_fog_density':         'fog_density',
+            'aframe_use_mixins':          'use_mixins',
+            'aframe_include_custom_css':  'include_custom_css',
+            'aframe_custom_css':          'custom_css',
+            'aframe_export_textures':     'export_textures',
+            'aframe_theme_color':         'theme_color',
+            'aframe_background_color':    'background_color',
+            'aframe_include_manifest':    'include_manifest',
+            'aframe_include_service_worker': 'include_service_worker',
+            'aframe_export_as_zip':       'export_as_zip',
         }
         for scene_prop, op_prop in prop_map.items():
             if hasattr(scene, scene_prop):
@@ -214,7 +225,6 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         wm = context.window_manager
         wm.aframe_show_aframe      = True
         wm.aframe_show_environment = True
-        wm.aframe_show_fog         = False
         wm.aframe_show_webapp      = False
         wm.aframe_show_materials   = False
         wm.aframe_show_export      = False
@@ -388,15 +398,11 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
             if self.include_environment:
                 box.prop(self, "environment_preset")
 
-        # Advanced (shadows, cursor) — closed by default
+        # Advanced (shadows, cursor, fog) — closed by default
         box = layout.box()
         if header(box, "aframe_show_adv", "Advanced", icon='SETTINGS'):
             box.prop(self, "shadows_enabled")
             box.prop(self, "enable_cursor")
-
-        # Fog — closed by default
-        box = layout.box()
-        if header(box, "aframe_show_fog", "Fog", icon='FOG'):
             box.prop(self, "fog_enabled")
             if self.fog_enabled:
                 box.prop(self, "fog_color")
@@ -415,6 +421,8 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         if header(box, "aframe_show_materials", "Materials", icon='MATERIAL'):
             box.prop(self, "use_mixins")
             box.prop(self, "include_custom_css")
+            if self.include_custom_css:
+                box.prop(self, "custom_css")
             box.prop(self, "export_textures")
 
         # Export Format — closed by default
