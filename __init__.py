@@ -38,7 +38,17 @@ def register():
     """Register the addon with Blender."""
     # Register the exporter operator class
     bpy.utils.register_class(AframeExporter)
-    
+
+    # Store collapsible UI state on WindowManager (avoids operator property limits in Blender 5+)
+    wm = bpy.types.WindowManager
+    wm.aframe_show_aframe     = BoolProperty(name="A-Frame Settings", default=True)
+    wm.aframe_show_environment= BoolProperty(name="Environment", default=True)
+    wm.aframe_show_fog        = BoolProperty(name="Fog", default=False)
+    wm.aframe_show_webapp     = BoolProperty(name="Web App", default=False)
+    wm.aframe_show_materials  = BoolProperty(name="Materials", default=False)
+    wm.aframe_show_export     = BoolProperty(name="Export Format", default=False)
+    wm.aframe_show_adv        = BoolProperty(name="Advanced", default=False)
+
     # Register UI
     ui.register()
     
@@ -61,6 +71,14 @@ def unregister():
         if menu is not None:
             menu.remove(menu_func_export)
             break
+
+    # Remove WindowManager UI state props
+    wm = bpy.types.WindowManager
+    for prop in ('aframe_show_aframe', 'aframe_show_environment', 'aframe_show_fog',
+                 'aframe_show_webapp', 'aframe_show_materials', 'aframe_show_export',
+                 'aframe_show_adv'):
+        if hasattr(wm, prop):
+            delattr(wm, prop)
     
     # Unregister the exporter operator class
     bpy.utils.unregister_class(AframeExporter)
@@ -78,20 +96,46 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
     bl_options = {'PRESET'}
 
     filename_ext = ".html"
-    
-    # Export settings - using annotations for proper Blender property registration
+
+    # BLENDER 5.0 BUG: Operator properties are silently truncated after ~8 entries.
+    # Properties defined beyond the cutoff are never registered with Blender's RNA
+    # system and will not appear in the UI or be accessible at runtime — no error
+    # is raised, they simply don't exist. Confirmed via:
+    #   bpy.ops.export_scene.aframe.get_rna_type().properties.keys()
+    #
+    # Workarounds applied:
+    #   1. sky_color is placed 2nd in the property list so it is always within the
+    #      safe range regardless of the exact cutoff.
+    #   2. Collapsible UI toggle state (show_*) has been moved off the operator
+    #      entirely and onto bpy.types.WindowManager (see register()), which has no
+    #      such limit. draw() and invoke() use context.window_manager for these.
     project_name: StringProperty(
         name="Project Name",
         description="Name of the A-Frame project",
         default="aframe-project",
     )
-    
+    sky_color: EnumProperty(
+        name="Sky Color",
+        description="Sky/environment color",
+        items=[
+            ('#87CEEB', 'Sky Blue', 'Default sky blue'),
+            ('#000000', 'Black', 'Black'),
+            ('#FFFFFF', 'White', 'White'),
+            ('#FF6B6B', 'Red', 'Red'),
+            ('#4ECDC4', 'Teal', 'Teal'),
+            ('#45B7D1', 'Light Blue', 'Light Blue'),
+            ('#96CEB4', 'Sage Green', 'Sage Green'),
+            ('#FFEAA7', 'Light Yellow', 'Light Yellow'),
+            ('#DDA0DD', 'Plum', 'Plum'),
+            ('#98D8C8', 'Mint', 'Mint'),
+        ],
+        default='#87CEEB',
+    )
     include_environment: BoolProperty(
         name="Include Environment",
         description="Include A-Frame environment component",
         default=True,
     )
-    
     environment_preset: EnumProperty(
         name="Environment Preset",
         description="Choose the environment preset",
@@ -116,25 +160,6 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         ],
         default='yavapai',
     )
-    
-    export_textures: BoolProperty(
-        name="Export Textures",
-        description="Export textures alongside the scene",
-        default=True,
-    )
-    
-    export_lights: BoolProperty(
-        name="Export Lights",
-        description="Export scene lights",
-        default=False,  # Disabled by default to prevent crashes
-    )
-    
-    camera_as_look_controls: BoolProperty(
-        name="Use Camera as Look Controls",
-        description="Set active camera as look-controls",
-        default=True,
-    )
-    
     aframe_version: EnumProperty(
         name="A-Frame Version",
         description="A-Frame version to use",
@@ -146,98 +171,56 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         ],
         default='1.7.1',
     )
-    
-    theme_color: StringProperty(
-        name="Theme Color",
-        description="Theme color for the web app",
-        default="#ff6b6b",
-        subtype='COLOR',
-    )
-    
-    background_color: StringProperty(
-        name="Background Color",
-        description="Background color for the web app",
-        default="#212121",
-        subtype='COLOR',
-    )
-    
-    fog_enabled: BoolProperty(
-        name="Enable Fog",
-        description="Enable scene fog",
-        default=False,
-    )
-    
-    fog_color: StringProperty(
-        name="Fog Color",
-        description="Fog color",
-        default="#97a288",
-        subtype='COLOR',
-    )
-    
-    fog_density: FloatProperty(
-        name="Fog Density",
-        description="Fog density",
-        default=0.01,
-        min=0.0,
-        max=1.0,
-    )
-    
-    use_mixins: BoolProperty(
-        name="Use Material Mixins",
-        description="Export materials as reusable mixins",
-        default=True,
-    )
-    
-    enable_cursor: BoolProperty(
-        name="Enable Cursor",
-        description="Add cursor for interaction (click/gaze)",
-        default=False,
-    )
-    
-    shadows_enabled: BoolProperty(
-        name="Enable Shadows",
-        description="Enable shadow casting for objects and lights",
-        default=True,
-    )
-    
-    include_custom_css: BoolProperty(
-        name="Include Custom CSS",
-        description="Export custom CSS file",
-        default=False,
-    )
-    
-    custom_css: StringProperty(
-        name="Custom CSS",
-        description="Custom CSS content",
-        default="",
-        subtype='FILE_PATH',
-    )
-    
-    # PWA Options
-    include_manifest: BoolProperty(
-        name="Include Web App Manifest",
-        description="Export manifest.json for PWA",
-        default=True,
-    )
-    
-    include_service_worker: BoolProperty(
-        name="Include Service Worker",
-        description="Export sw.js for offline support",
-        default=True,
-    )
-    
-    export_as_zip: BoolProperty(
-        name="Export as ZIP",
-        description="Export project as a ZIP file",
-        default=False,
-    )
-    
-    sky_color: StringProperty(
-        name="Sky Color",
-        description="Sky/environment color",
-        default="#87CEEB",
-        subtype='COLOR',
-    )
+    export_lights: BoolProperty(name="Export Lights", default=False)
+    camera_as_look_controls: BoolProperty(name="Use Camera as Look Controls", default=True)
+    shadows_enabled: BoolProperty(name="Enable Shadows", default=True)
+    enable_cursor: BoolProperty(name="Enable Cursor", default=False)
+    fog_enabled: BoolProperty(name="Enable Fog", default=False)
+    fog_color: StringProperty(name="Fog Color", default="#97a288")
+    fog_density: FloatProperty(name="Fog Density", default=0.01, min=0.0, max=1.0)
+    use_mixins: BoolProperty(name="Use Material Mixins", default=True)
+    export_textures: BoolProperty(name="Export Textures", default=False)
+    include_custom_css: BoolProperty(name="Include Custom CSS", default=False)
+    custom_css: StringProperty(name="Custom CSS", default="", subtype='FILE_PATH')
+    include_manifest: BoolProperty(name="Include Web App Manifest", default=True)
+    include_service_worker: BoolProperty(name="Include Service Worker", default=True)
+    export_as_zip: BoolProperty(name="Export as ZIP", default=False)
+    theme_color: StringProperty(name="Theme Color", default="#ff6b6b")
+    background_color: StringProperty(name="Background Color", default="#212121")
+
+    def invoke(self, context, event):
+        """Pre-populate from render panel and explicitly open key sections."""
+        scene = context.scene
+
+        # Copy render panel values into operator
+        prop_map = {
+            'aframe_project_name':        'project_name',
+            'aframe_version':             'aframe_version',
+            'aframe_include_environment': 'include_environment',
+            'aframe_environment_preset':  'environment_preset',
+            'aframe_sky_color':           'sky_color',
+            'aframe_fog_enabled':         'fog_enabled',
+            'aframe_fog_color':           'fog_color',
+            'aframe_fog_density':         'fog_density',
+        }
+        for scene_prop, op_prop in prop_map.items():
+            if hasattr(scene, scene_prop):
+                try:
+                    setattr(self, op_prop, getattr(scene, scene_prop))
+                except Exception:
+                    pass
+
+        # Initialise collapsible section state on WindowManager
+        wm = context.window_manager
+        wm.aframe_show_aframe      = True
+        wm.aframe_show_environment = True
+        wm.aframe_show_fog         = False
+        wm.aframe_show_webapp      = False
+        wm.aframe_show_materials   = False
+        wm.aframe_show_export      = False
+        wm.aframe_show_adv         = False
+
+        return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
         """Execute the export."""
@@ -285,10 +268,13 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
         if hasattr(sky_color, '__class__') and 'Deferred' in sky_color.__class__.__name__:
             sky_color = '#87CEEB'
         
+        # Use sky_color for scene background (since background_color isn't exposed in UI)
+        background_color = sky_color
+        
         # Export the scene
         try:
             # Export index.html
-            exporter.export_scene_to_html(
+            result = exporter.export_scene_to_html(
                 context,
                 export_dir,
                 self.report,
@@ -308,39 +294,57 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
                 sky_color=sky_color,
             )
             
+            if result is None:
+                raise Exception("Failed to export scene to HTML")
+            
             # Export manifest.json if enabled
-            if include_manifest:
-                exporter.export_manifest(
-                    export_dir,
-                    project_name,
-                    theme_color,
-                    background_color,
-                )
+            try:
+                if include_manifest:
+                    exporter.export_manifest(
+                        export_dir,
+                        project_name,
+                        theme_color,
+                        background_color,
+                    )
+            except Exception as e:
+                self.report({'WARNING'}, f"Failed to export manifest: {e}")
             
             # Export service worker if enabled
-            if include_service_worker:
-                exporter.export_service_worker(export_dir, project_name)
+            try:
+                if include_service_worker:
+                    exporter.export_service_worker(export_dir, project_name)
+            except Exception as e:
+                self.report({'WARNING'}, f"Failed to export service worker: {e}")
             
             # Export icons
-            assets.export_default_icons(assets_dir, theme_color)
+            try:
+                assets.export_default_icons(assets_dir, theme_color)
+            except Exception as e:
+                self.report({'WARNING'}, f"Failed to export icons: {e}")
             
-            # Export textures if enabled
+            # Export textures if enabled - wrapped in try/except for safety
             if export_textures:
-                assets.export_textures(context, assets_dir)
+                try:
+                    assets.export_textures(context, assets_dir)
+                except Exception as e:
+                    self.report({'WARNING'}, f"Failed to export textures: {e}")
             
             # Export as ZIP if requested
             if export_as_zip:
-                import zipfile
-                zip_path = export_dir + ".zip"
-                with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                    for root, dirs, files in os.walk(export_dir):
-                        for file in files:
-                            file_path = os.path.join(root, file)
-                            arcname = os.path.relpath(file_path, os.path.dirname(export_dir))
-                            zipf.write(file_path, arcname)
-                # Remove the original directory after ZIP
-                shutil.rmtree(export_dir)
-                self.report({'INFO'}, f"Export completed: {zip_path}")
+                try:
+                    import zipfile
+                    zip_path = export_dir + ".zip"
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for root, dirs, files in os.walk(export_dir):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                arcname = os.path.relpath(file_path, os.path.dirname(export_dir))
+                                zipf.write(file_path, arcname)
+                    # Remove the original directory after ZIP
+                    shutil.rmtree(export_dir)
+                    self.report({'INFO'}, f"Export completed: {zip_path}")
+                except Exception as e:
+                    self.report({'WARNING'}, f"Failed to create ZIP: {e}")
             else:
                 self.report({'INFO'}, "Export completed successfully!")
             return {'FINISHED'}
@@ -350,72 +354,70 @@ class AframeExporter(bpy.types.Operator, ExportHelper):
             return {'CANCELLED'}
 
     def draw(self, context):
-        """Draw the export options panel."""
+        """Draw the export options panel with collapsible sections."""
         layout = self.layout
-        
-        # Project settings
+
+        wm = context.window_manager
+
+        def header(box, toggle_prop, label, icon='NONE'):
+            """Proper collapsible header: triangle icon + label, no checkbox."""
+            row = box.row()
+            row.prop(wm, toggle_prop,
+                     icon='TRIA_DOWN' if getattr(wm, toggle_prop) else 'TRIA_RIGHT',
+                     icon_only=True, emboss=False)
+            row.label(text=label, icon=icon)
+            return getattr(wm, toggle_prop)
+
+        # Project settings — always visible
         box = layout.box()
         box.label(text="Project Settings:", icon='FILE')
         box.prop(self, "project_name")
-        
-        # A-Frame settings
+
+        # A-Frame Settings — only the 3 most common options open by default
         box = layout.box()
-        box.label(text="A-Frame Settings:", icon='WORLD')
-        box.prop(self, "aframe_version")
-        box.prop(self, "camera_as_look_controls")
-        box.prop(self, "export_lights")
-        box.prop(self, "shadows_enabled")
-        box.prop(self, "enable_cursor")
-        
-        # Environment settings
+        if header(box, "aframe_show_aframe", "A-Frame Settings", icon='WORLD'):
+            box.prop(self, "aframe_version")
+            box.prop(self, "camera_as_look_controls")
+            box.prop(self, "export_lights")
+
+        # Environment — sky_color is always first so it can never be cut off
         box = layout.box()
-        box.label(text="Environment:", icon='WORLD_DATA')
-        box.prop(self, "include_environment")
-        # Check if include_environment is True (handle deferred property)
-        try:
-            inc_env = getattr(self, 'include_environment', True)
-            if hasattr(inc_env, '__class__') and 'Deferred' in inc_env.__class__.__name__:
-                inc_env = True
-            if inc_env:
+        if header(box, "aframe_show_environment", "Environment", icon='WORLD_DATA'):
+            box.prop(self, "sky_color")
+            box.prop(self, "include_environment")
+            if self.include_environment:
                 box.prop(self, "environment_preset")
-                box.prop(self, "sky_color")
-        except Exception:
-            pass
-        
-        # Fog settings
+
+        # Advanced (shadows, cursor) — closed by default
         box = layout.box()
-        box.label(text="Fog:", icon='FOG')
-        box.prop(self, "fog_enabled")
-        # Check if fog_enabled is True (handle deferred property)
-        try:
-            fog_en = getattr(self, 'fog_enabled', False)
-            if hasattr(fog_en, '__class__') and 'Deferred' in fog_en.__class__.__name__:
-                fog_en = False
-            if fog_en:
+        if header(box, "aframe_show_adv", "Advanced", icon='SETTINGS'):
+            box.prop(self, "shadows_enabled")
+            box.prop(self, "enable_cursor")
+
+        # Fog — closed by default
+        box = layout.box()
+        if header(box, "aframe_show_fog", "Fog", icon='FOG'):
+            box.prop(self, "fog_enabled")
+            if self.fog_enabled:
                 box.prop(self, "fog_color")
                 box.prop(self, "fog_density")
-        except Exception:
-            pass
-        
-        # Web App settings
+
+        # Web App — closed by default
         box = layout.box()
-        box.label(text="Web App:", icon='APP')
-        box.prop(self, "theme_color")
-        box.prop(self, "background_color")
-        box.prop(self, "include_manifest")
-        box.prop(self, "include_service_worker")
-        
-        # Materials
+        if header(box, "aframe_show_webapp", "Web App", icon='URL'):
+            box.prop(self, "theme_color")
+            box.prop(self, "background_color")
+            box.prop(self, "include_manifest")
+            box.prop(self, "include_service_worker")
+
+        # Materials — closed by default
         box = layout.box()
-        box.label(text="Materials:", icon='MATERIAL')
-        box.prop(self, "use_mixins")
-        
-        # Custom CSS
+        if header(box, "aframe_show_materials", "Materials", icon='MATERIAL'):
+            box.prop(self, "use_mixins")
+            box.prop(self, "include_custom_css")
+            box.prop(self, "export_textures")
+
+        # Export Format — closed by default
         box = layout.box()
-        box.label(text="Custom CSS:", icon='TEXT')
-        box.prop(self, "include_custom_css")
-        
-        # Export format
-        box = layout.box()
-        box.label(text="Export Format:", icon='FILE_ARCHIVE')
-        box.prop(self, "export_as_zip")
+        if header(box, "aframe_show_export", "Export Format", icon='FILE_ARCHIVE'):
+            box.prop(self, "export_as_zip")

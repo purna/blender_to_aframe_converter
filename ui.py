@@ -38,6 +38,15 @@ class AFRAME_PT_export_panel(Panel):
         box.prop(scene, "aframe_include_environment")
         if scene.aframe_include_environment:
             box.prop(scene, "aframe_environment_preset")
+        box.prop(scene, "aframe_sky_color")
+
+        # Fog settings
+        box = layout.box()
+        box.label(text="Fog", icon='MOD_SMOKE')
+        box.prop(scene, "aframe_fog_enabled")
+        if scene.aframe_fog_enabled:
+            box.prop(scene, "aframe_fog_color")
+            box.prop(scene, "aframe_fog_density")
         
         # Export button
         layout.separator()
@@ -105,6 +114,44 @@ def register():
         ],
         default='yavapai',
     )
+    
+    bpy.types.Scene.aframe_sky_color = bpy.props.EnumProperty(
+        name="Sky Color",
+        description="Sky/environment color",
+        items=[
+            ('#87CEEB', 'Sky Blue', 'Default sky blue'),
+            ('#000000', 'Black', 'Black'),
+            ('#FFFFFF', 'White', 'White'),
+            ('#FF6B6B', 'Red', 'Red'),
+            ('#4ECDC4', 'Teal', 'Teal'),
+            ('#45B7D1', 'Light Blue', 'Light Blue'),
+            ('#96CEB4', 'Sage Green', 'Sage Green'),
+            ('#FFEAA7', 'Light Yellow', 'Light Yellow'),
+            ('#DDA0DD', 'Plum', 'Plum'),
+            ('#98D8C8', 'Mint', 'Mint'),
+        ],
+        default='#87CEEB',
+    )
+
+    bpy.types.Scene.aframe_fog_enabled = bpy.props.BoolProperty(
+        name="Enable Fog",
+        description="Enable scene fog",
+        default=False,
+    )
+
+    bpy.types.Scene.aframe_fog_color = bpy.props.StringProperty(
+        name="Fog Color",
+        description="Fog color as hex",
+        default="#97a288",
+    )
+
+    bpy.types.Scene.aframe_fog_density = bpy.props.FloatProperty(
+        name="Fog Density",
+        description="Fog density (0.0 - 1.0)",
+        default=0.01,
+        min=0.0,
+        max=1.0,
+    )
 
 
 def unregister():
@@ -123,3 +170,11 @@ def unregister():
         del bpy.types.Scene.aframe_include_environment
     if hasattr(bpy.types.Scene, 'aframe_environment_preset'):
         del bpy.types.Scene.aframe_environment_preset
+    if hasattr(bpy.types.Scene, 'aframe_sky_color'):
+        del bpy.types.Scene.aframe_sky_color
+    if hasattr(bpy.types.Scene, 'aframe_fog_enabled'):
+        del bpy.types.Scene.aframe_fog_enabled
+    if hasattr(bpy.types.Scene, 'aframe_fog_color'):
+        del bpy.types.Scene.aframe_fog_color
+    if hasattr(bpy.types.Scene, 'aframe_fog_density'):
+        del bpy.types.Scene.aframe_fog_density

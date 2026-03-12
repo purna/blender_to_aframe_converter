@@ -101,7 +101,9 @@ ANIMATION_TRACKS = []
 
 def get_material_id(material):
     """Generate a unique ID for a material."""
-    return f"mat_{material.name.lower().replace(' ', '_')}"
+    # Replace spaces and dots with underscores to create valid CSS selectors
+    name = material.name.lower().replace(' ', '_').replace('.', '_')
+    return f"mat_{name}"
 
 
 def convert_material(obj, use_mixins=True):
@@ -208,23 +210,117 @@ def get_mesh_primitive(obj):
     
     mesh = obj.data
     
-    # Check for custom shape
+    # Check for custom shape/animation
     if obj.data.shape_keys:
         return 'a-entity'  # Animated meshes need custom handling
     
-    # Detect primitive from vertex count and edges
-    vertices = len(mesh.vertices)
+    # Try to get the mesh type from Blender object data
+    # Blender stores primitive type in obj.data.type
+    mesh_type = getattr(mesh, 'type', None)
+    if mesh_type and mesh_type in MESH_TO_AFRAME:
+        return MESH_TO_AFRAME[mesh_type]
     
-    if vertices == 8 and len(mesh.polygons) == 6:
-        # Box
-        return 'a-box'
-    elif vertices > 100:
-        # Likely a sphere
+    # Also check by object name pattern as fallback (for objects created from primitives)
+    obj_name = obj.name.lower()
+    
+    # Check for standard primitives by name pattern
+    if 'sphere' in obj_name or 'icosphere' in obj_name or 'uv_sphere' in obj_name:
         return 'a-sphere'
-    else:
-        # Default to box or entity
+    if 'torus' in obj_name:
+        return 'a-torus'
+    if 'cylinder' in obj_name:
+        return 'a-cylinder'
+    if 'cone' in obj_name:
+        return 'a-cone'
+    if 'plane' in obj_name:
+        return 'a-plane'
+    if 'circle' in obj_name:
+        return 'a-circle'
+    if 'cube' in obj_name or 'box' in obj_name:
         return 'a-box'
+    
+    # Check for standard primitives by topology
+    vertices = len(mesh.vertices)
+    polygons = len(mesh.polygons)
+    
+    # Box/Cube detection (8 vertices, 6 faces)
+    if vertices == 8 and polygons == 6:
+        return 'a-box'
+    
+    # Plane detection (4 vertices, 1 face)
+    if vertices == 4 and polygons == 1:
+        return 'a-plane'
+    
+    # Circle detection
+    if vertices >= 32 and polygons == 1:
+        return 'a-circle'
+    
+    # Sphere detection
+    if vertices > 100:
+        return 'a-sphere'
+    
+    # Cylinder detection
+    if vertices >= 20 and polygons >= 3:
+        return 'a-cylinder'
+    
+    # Default to box
+    return 'a-box'
 
+
+def convert_text_to_aframe(obj):
+    """Convert a Blender text object to A-Frame text entity."""
+    if obj.type != 'FONT':
+        return None
+    
+    text_obj = obj.data
+    
+    attrs = []
+    text_props = []
+    
+    # Position
+    attrs.append(f'position="{convert_location(obj.location)}"')
+    
+    # Rotation
+    if obj.rotation_mode == 'QUATERNION':
+        euler = obj.rotation_quaternion.to_euler()
+        attrs.append(f'rotation="{convert_rotation(euler)}"')
+    else:
+        attrs.append(f'rotation="{convert_rotation(obj.rotation_euler)}"')
+    
+    # Scale
+    attrs.append(f'scale="{convert_scale(obj.scale)}"')
+    
+    # Text content
+    text_value = text_obj.body if hasattr(text_obj, 'body') else obj.name
+    text_props.append(f'value: {text_value}')
+    
+    # Text color
+    text_color = '#FFFFFF'
+    if text_obj.materials:
+        mat = text_obj.materials[0]
+        if hasattr(mat, 'diffuse_color'):
+            text_color = convert_color(mat.diffuse_color)
+    text_props.append(f'color: {text_color}')
+    
+    # Text alignment - default to left
+    align = getattr(text_obj, 'align', 'left')
+    text_props.append(f'align: {align}')
+    
+    # Font size (width for A-Frame text)
+    width = getattr(text_obj, 'size', 1.0)
+    text_props.append(f'width: {width * 10}')
+    
+    # Build text component
+    text_component = '; '.join(text_props)
+    attrs.append(f'text="{text_component}"')
+    
+    # Add object name as ID
+    attrs.append(f'id="{obj.name}"')
+    attrs.append(f'name="{obj.name}"')
+    
+    element = f"<a-text {' '.join(attrs)}></a-text>"
+    
+    return element
 
 def get_geometry_attributes(obj):
     """Extract geometry attributes for A-Frame primitives."""
@@ -281,9 +377,13 @@ def convert_object_to_aframe(obj, export_lights=True, shadow_enabled=True):
         return convert_light_to_aframe(obj)
     
     # Skip non-mesh objects for now (could be extended)
-    if obj_type not in ('MESH', 'CURVE', 'SURFACE', 'FONT'):
+    if obj_type not in ('MESH', 'CURVE', 'SURFACE', 'FONT', 'LIGHT'):
         # Convert as generic entity
         return convert_generic_entity(obj)
+    
+    # Handle text objects
+    if obj_type == 'FONT':
+        return convert_text_to_aframe(obj)
     
     # Get primitive type
     primitive = get_mesh_primitive(obj)
@@ -772,6 +872,8 @@ def export_scene_to_html(
     
     # Add camera (use active camera or first camera)
     active_camera = scene.camera
+    camera_added = False
+    
     if active_camera:
         try:
             camera_element = convert_camera_to_aframe(
@@ -781,9 +883,12 @@ def export_scene_to_html(
             )
             if camera_element:
                 scene_elements.append(camera_element)
+                camera_added = True
         except Exception as e:
             print(f"Error converting active camera: {e}")
-    elif cameras:
+    
+    # If no camera was added, create a default camera
+    if not camera_added and cameras:
         # Use first available camera
         try:
             camera_element = convert_camera_to_aframe(
@@ -793,8 +898,15 @@ def export_scene_to_html(
             )
             if camera_element:
                 scene_elements.append(camera_element)
+                camera_added = True
         except Exception as e:
             print(f"Error converting camera: {e}")
+    
+    # If still no camera, add a default camera
+    if not camera_added:
+        # Add a default camera at a reasonable viewing position
+        default_camera = '<a-camera position="0 1.6 5" look-controls wasd-controls></a-camera>'
+        scene_elements.append(default_camera)
     
     # Build fog attribute
     fog_attr = ""
@@ -807,14 +919,16 @@ def export_scene_to_html(
     
     # Environment component
     env_element = ""
-    sky_element = ""
     if include_environment and environment_preset != 'none':
         ground_color = "#445"
-        # Remove visible="" as it causes black sky - use background on scene and a-sky instead
+        # Generate environment entity with a-sky as child element
         env_element = f'''
-    <a-entity environment="preset: {environment_preset}; groundColor: {ground_color}; skyColor: {sky_color}; grid: none; skyType: atmosphere; lighting: point"></a-entity>'''
-        # Add a-sky element for reliable background color
-        sky_element = f'\n    <a-sky color="{sky_color}"></a-sky>'
+    <a-entity environment="preset: {environment_preset}; groundColor: {ground_color}; skyColor: {sky_color}; grid: none; skyType: atmosphere; lighting: point">
+      <a-entity class="environment" position="" light="" visible=""></a-entity>
+      <a-entity rotation="" class="environmentGround environment" visible="" scale="" shadow=""></a-entity>
+      <a-entity class="environmentDressing environment" visible=""></a-entity>
+      <a-sky radius="200" theta-length="110" class="environment" material="" visible="" geometry="" scale=""></a-sky>
+    </a-entity>'''
     
     # Combine all elements
     scene_content = '\n    '.join(scene_elements)
@@ -825,7 +939,7 @@ def export_scene_to_html(
         css_link = '  <link rel="stylesheet" href="style.css">'
     
     # Generate the HTML
-    # Add background color to scene for reliable sky
+    # Add background color to scene from UI settings
     background_attr = f'background="color: {sky_color}"'
     
     html_content = f'''<!DOCTYPE html>
@@ -847,6 +961,7 @@ def export_scene_to_html(
   <script src="https://unpkg.com/aframe-extras@7.0.0/dist/aframe-extras.min.js"></script>
 </head>
 <body>
+ <!-- Scene -->
   <a-scene 
     stats="false" 
     {background_attr}
@@ -860,9 +975,11 @@ def export_scene_to_html(
     <!-- Material Mixins -->
 {mixins_html}
     
+    <!-- Scene Objects (Shapes) -->
     {scene_content}
+    
+    <!-- Environment -->
     {env_element}
-    {sky_element}
   <canvas class="a-canvas a-grab-cursor a-mouse-cursor-hover" data-aframe-canvas="true" data-engine="three.js r173" width="1056" height="1576"></canvas></a-scene>
 </body>
 </html>'''
