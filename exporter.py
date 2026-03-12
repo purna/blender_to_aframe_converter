@@ -1072,7 +1072,9 @@ def export_scene_to_html(
     
     <!-- Environment -->
     {env_element}
-  <canvas class="a-canvas a-grab-cursor a-mouse-cursor-hover" data-aframe-canvas="true" data-engine="three.js r173" width="1056" height="1576"></canvas></a-scene>
+    
+    <!-- UI -->
+    <canvas class="a-canvas a-grab-cursor a-mouse-cursor-hover" data-aframe-canvas="true" data-engine="three.js r173" width="1056" height="1576"></canvas></a-scene>
 </body>
 </html>'''
     
