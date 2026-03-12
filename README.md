@@ -20,7 +20,7 @@ A Blender addon that exports Blender scenes to A-Frame HTML format for WebVR/Web
 1. Download or clone this repository
 2. Open Blender
 3. Go to **Edit > Preferences > Add-ons**
-4. Click **Install** and select the `ZIP` file
+4. Click **Install** and select the `zip` file
 5. Enable the addon by checking the box next to "Blender to A-Frame Converter"
 
 ## Usage
