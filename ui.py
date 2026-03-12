@@ -121,22 +121,24 @@ def register():
         description="Choose the environment preset",
         items=[
             ('none', 'None', 'No environment'),
-            ('arches', 'Arches', 'Arches environment'),
-            ('contact', 'Contact', 'Contact environment'),
             ('default', 'Default', 'Default environment'),
-            ('eos', 'EOS', 'EOS environment'),
+            ('contact', 'Contact', 'Contact environment'),
+            ('egypt', 'Egypt', 'Egypt environment'),
+            ('checkerboard', 'Checkerboard', 'Checkerboard environment'),
             ('forest', 'Forest', 'Forest environment'),
-            ('goldmine', 'Goldmine', 'Goldmine environment'),
             ('goaland', 'Goaland', 'Goaland environment'),
-            ('joshuatree', 'Joshua Tree', 'Joshua Tree environment'),
-            ('moon', 'Moon', 'Moon environment'),
-            ('osiris', 'Osiris', 'Osiris environment'),
-            ('poison', 'Poison', 'Poison environment'),
-            ('starry', 'Starry', 'Starry environment'),
-            ('threetowers', 'Three Towers', 'Three Towers environment'),
-            ('touch', 'Touch', 'Touch environment'),
-            ('trek', 'Trek', 'Trek environment'),
             ('yavapai', 'Yavapai', 'Yavapai environment'),
+            ('goldmine', 'Goldmine', 'Goldmine environment'),
+            ('threetowers', 'Three Towers', 'Three Towers environment'),
+            ('poison', 'Poison', 'Poison environment'),
+            ('arches', 'Arches', 'Arches environment'),
+            ('tron', 'Tron', 'Tron environment'),
+            ('japan', 'Japan', 'Japan environment'),
+            ('dream', 'Dream', 'Dream environment'),
+            ('volcano', 'Volcano', 'Volcano environment'),
+            ('starry', 'Starry', 'Starry environment'),
+            ('osiris', 'Osiris', 'Osiris environment'),
+            ('moon', 'Moon', 'Moon environment'),
         ],
         default='yavapai',
     )
@@ -168,7 +170,7 @@ def register():
     bpy.types.Scene.aframe_export_lights = bpy.props.BoolProperty(
         name="Export Lights",
         description="Export lights to A-Frame",
-        default=False,
+        default=True,
     )
 
     bpy.types.Scene.aframe_shadows_enabled = bpy.props.BoolProperty(
@@ -229,7 +231,7 @@ def register():
     bpy.types.Scene.aframe_export_textures = bpy.props.BoolProperty(
         name="Export Textures",
         description="Export textures with the scene",
-        default=False,
+        default=True,
     )
 
     bpy.types.Scene.aframe_export_as_zip = bpy.props.BoolProperty(

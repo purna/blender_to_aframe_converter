@@ -96,6 +96,9 @@ AFRAME_COMPONENT_SCRIPTS = {
 # Material library storage
 MATERIAL_LIBRARY = {}
 
+# Texture library storage
+TEXTURE_LIBRARY = {}
+
 # Animation tracking
 ANIMATION_TRACKS = []
 
@@ -104,6 +107,14 @@ def get_material_id(material):
     # Replace spaces and dots with underscores to create valid CSS selectors
     name = material.name.lower().replace(' ', '_').replace('.', '_')
     return f"mat_{name}"
+
+
+def get_texture_id(image):
+    """Generate a unique ID for a texture."""
+    if image is None:
+        return None
+    name = image.name.lower().replace(' ', '_').replace('.', '_')
+    return f"tex_{name}"
 
 
 def convert_material(obj, use_mixins=True):
@@ -137,15 +148,38 @@ def convert_material(obj, use_mixins=True):
     # Extract material properties
     props = []
     
-    # Base color - with safety check
-    try:
-        base_color_input = principled.inputs.get('Base Color')
-        if base_color_input is not None:
-            color = base_color_input.default_value
-            if color:
-                props.append(f'color: {convert_color(color[:3])}')
-    except Exception:
-        pass
+    # Check for texture connected to Base Color
+    base_color_input = principled.inputs.get('Base Color')
+    if base_color_input and hasattr(base_color_input, 'links') and base_color_input.links:
+        texture_node = base_color_input.links[0].from_node
+        if texture_node and texture_node.type == 'TEX_IMAGE':
+            if texture_node.image:
+                tex_id = get_texture_id(texture_node.image)
+                TEXTURE_LIBRARY[tex_id] = {
+                    'image': texture_node.image,
+                    'filepath': texture_node.image.filepath
+                }
+                props.append(f'src: #{tex_id}')
+                print(f"DEBUG: Found texture: {tex_id} - {texture_node.image.filepath}")
+                # Also get color if available
+                try:
+                    if hasattr(texture_node, 'inputs') and texture_node.inputs.get('Color'):
+                        tex_color = texture_node.inputs['Color'].default_value
+                        if tex_color and len(tex_color) >= 3:
+                            props.append(f'color: {convert_color(tex_color[:3])}')
+                except:
+                    pass
+    
+    # Base color - with safety check (only if not using texture)
+    if 'src:' not in '; '.join(props):
+        try:
+            base_color_input = principled.inputs.get('Base Color')
+            if base_color_input is not None:
+                color = base_color_input.default_value
+                if color:
+                    props.append(f'color: {convert_color(color[:3])}')
+        except Exception:
+            pass
     
     # Metalness - with safety check
     try:
@@ -190,8 +224,17 @@ def convert_material(obj, use_mixins=True):
     if not props:
         return ""
     
-    # Store in material library for mixin
-    if use_mixins:
+    # Check if we have a texture
+    has_texture = any('src:' in prop for prop in props)
+    
+    # If we have a texture, use inline material to ensure texture is applied
+    # Otherwise use mixin for better performance
+    if has_texture:
+        # Use inline material with texture
+        mat_str = '; '.join(props)
+        return f'material="{mat_str}"'
+    elif use_mixins:
+        # Store in material library for mixin
         MATERIAL_LIBRARY[mat_id] = {
             'shader': 'standard',
             'props': props
@@ -368,13 +411,18 @@ def convert_object_to_aframe(obj, export_lights=True, shadow_enabled=True):
     """Convert a Blender object to A-Frame entity."""
     obj_type = get_blender_object_type(obj)
     
+    print(f"DEBUG: Converting object {obj.name}, type: {obj_type}, export_lights: {export_lights}")
+    
     # Skip cameras (handled separately)
     if obj_type == 'CAMERA':
         return None
     
     # Handle lights if enabled
     if obj_type == 'LIGHT' and export_lights:
-        return convert_light_to_aframe(obj)
+        print(f"DEBUG: Processing light {obj.name}")
+        light_result = convert_light_to_aframe(obj)
+        print(f"DEBUG: Light result: {light_result}")
+        return light_result
     
     # Skip non-mesh objects for now (could be extended)
     if obj_type not in ('MESH', 'CURVE', 'SURFACE', 'FONT', 'LIGHT'):
@@ -513,16 +561,23 @@ def convert_light_to_aframe(obj, shadows_enabled=True):
         light_props.append('color: #ffffff')
     
     # Intensity - A-Frame defaults: point/spot=1, directional=0.5, area=0
-    # Blender: Point/Spot = energy, Sun = strength (typically 1-10)
+    # Blender: Point/Spot = energy (typically 1-1000), Sun = strength (typically 0-10)
+    # We'll use higher intensity values to make scenes brighter
     try:
         intensity = light.energy
         if light_type == 'SUN':
-            intensity = min(intensity / 10, 1.0)  # Scale sun intensity
+            # Sun lights in Blender are often 1-5 strength, but we need higher for A-Frame
+            # A-Frame directional lights need intensity around 1.0-2.0 for good brightness
+            intensity = intensity * 1.5  # Boost sun intensity
         elif light_type in ('POINT', 'SPOT'):
-            intensity = min(intensity / 100, 2.0)  # Scale point/spot lights
+            # Point/spot lights: Blender uses energy, A-Frame uses intensity directly
+            # Scale to reasonable range (A-Frame defaults to 1.0)
+            intensity = min(intensity / 50, 3.0)  # Scale down but allow up to 3.0
+        elif light_type == 'AREA':
+            intensity = min(intensity / 100, 2.0)
         light_props.append(f'intensity: {intensity:.2f}')
     except Exception:
-        light_props.append('intensity: 1')
+        light_props.append('intensity: 1.5')
     
     # Distance (for point/spot lights) - A-Frame default: 0 (infinite)
     if light_type in ('POINT', 'SPOT'):
@@ -815,6 +870,23 @@ def generate_material_mixins():
     return '\n'.join(mixins)
 
 
+def generate_texture_assets():
+    """Generate A-Frame asset items for textures."""
+    if not TEXTURE_LIBRARY:
+        return ""
+    
+    assets = []
+    for tex_id, tex_data in TEXTURE_LIBRARY.items():
+        image = tex_data.get('image')
+        if image:
+            # Get the filename from the image
+            filename = os.path.basename(image.filepath) if image.filepath else f"{tex_id}.jpg"
+            asset = f'        <img id="{tex_id}" src="assets/{filename}" crossorigin="anonymous">'
+            assets.append(asset)
+    
+    return '\n'.join(assets)
+
+
 def export_scene_to_html(
     context,
     export_dir,
@@ -839,6 +911,10 @@ def export_scene_to_html(
     # Clear material library for fresh export
     global MATERIAL_LIBRARY
     MATERIAL_LIBRARY = {}
+    
+    # Clear texture library for fresh export
+    global TEXTURE_LIBRARY
+    TEXTURE_LIBRARY = {}
     
     try:
         scene = context.scene
@@ -882,6 +958,7 @@ def export_scene_to_html(
                 enable_cursor=enable_cursor
             )
             if camera_element:
+                scene_elements.append('<!-- Camera -->')
                 scene_elements.append(camera_element)
                 camera_added = True
         except Exception as e:
@@ -897,6 +974,7 @@ def export_scene_to_html(
                 enable_cursor=enable_cursor
             )
             if camera_element:
+                scene_elements.append('<!-- Camera -->')
                 scene_elements.append(camera_element)
                 camera_added = True
         except Exception as e:
@@ -905,8 +983,14 @@ def export_scene_to_html(
     # If still no camera, add a default camera
     if not camera_added:
         # Add a default camera at a reasonable viewing position
+        scene_elements.append('<!-- Camera -->')
         default_camera = '<a-camera position="0 1.6 5" look-controls wasd-controls></a-camera>'
         scene_elements.append(default_camera)
+    
+    # Add ambient light to ensure scene isn't too dark if no other lights
+    # This is a fallback - users should export their lights for better control
+    ambient_light = '<!-- Lights -->\n<a-entity light="type: ambient; intensity: 0.4; color: #ffffff"></a-entity>'
+    scene_elements.insert(0, ambient_light)
     
     # Build fog attribute
     fog_attr = ""
@@ -917,13 +1001,17 @@ def export_scene_to_html(
     # Generate material mixins
     mixins_html = generate_material_mixins()
     
+    # Generate texture assets
+    texture_assets_html = generate_texture_assets()
+    
     # Environment component
     env_element = ""
     if include_environment and environment_preset != 'none':
         ground_color = "#445"
         # Generate environment entity with a-sky as child element
+        # Use "distant" lighting to simulate sun, but allow scene lights to work
         env_element = f'''
-    <a-entity environment="preset: {environment_preset}; groundColor: {ground_color}; skyColor: {sky_color}; grid: none; skyType: atmosphere; lighting: point">
+    <a-entity environment="preset: {environment_preset}; groundColor: {ground_color}; skyColor: {sky_color}; grid: none; skyType: atmosphere; lighting: distant">
       <a-entity class="environment" position="" light="" visible=""></a-entity>
       <a-entity rotation="" class="environmentGround environment" visible="" scale="" shadow=""></a-entity>
       <a-entity class="environmentDressing environment" visible=""></a-entity>
@@ -972,8 +1060,12 @@ def export_scene_to_html(
     renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: false; powerPreference: high-performance"
     {fog_attr}>
     
-    <!-- Material Mixins -->
+    <!-- Material Mixins and Texture Assets -->
+    <a-assets>
 {mixins_html}
+
+{texture_assets_html}
+    </a-assets>
     
     <!-- Scene Objects (Shapes) -->
     {scene_content}
