@@ -1,1 +1,1 @@
-# Blender to Aframe Exporter
+# Blender to AFrame Exporter
